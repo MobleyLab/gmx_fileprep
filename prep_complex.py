@@ -4,6 +4,8 @@
 #  * complex files are ready for energy minimization
 #  * ligand files need to be solvated and have ions added
 #    the water and ion FF parameters have already been added
+#  * the default parameters in the gromacs .top file are set 
+#    for SepTop (gen-pairs: no, fudgeLJ: 0.5)
 
 import parmed_wrapper as pmdw
 import io_wrapper as iow
@@ -19,7 +21,7 @@ def main():
 
     print("Step  2: Parameterizing Ligand with OpenFF")
     openff_ff = offw.setup_ff(ligand_ff)
-    lig_mol = offw.create_molecule(ligand_mol2)
+    lig_mol = offw.create_molecule(ligand_mol2, ligcode)
     lig_positions = lig_mol.conformers[0]
     lig_topology = lig_mol.to_topology()
     lig_system = openff_ff.create_openmm_system(lig_topology)
@@ -69,7 +71,7 @@ def main():
     unq_lig_struct.save(ligand_gro_out, overwrite=True)
     with tempfile.NamedTemporaryFile(suffix=".top") as tmp_top:
         final_lig_struct.save(tmp_top.name, overwrite=True)
-        iow.rm_molecule(tmp_top.name, ligand_top_out, ['LIG'])
+        iow.rm_molecule(tmp_top.name, ligand_top_out, [ligcode])
 
     end_time = time.time()
     print(f"Total Time Elapsed: {(end_time - start_time)/60:.2} min")
@@ -78,18 +80,22 @@ if __name__ == "__main__":
 
     base = "/Users/megosato/Desktop/bace/"
 
+    lig = "lig_16"
+
+    ligcode = "UNL"
+
     protein_pdb = base + "6od6_spruce_chainA.pdb"
     protein_ff = 'amber14/protein.ff14SB.xml'
     water_ff = 'amber14/tip3p.xml'
 
     ligand_ff = base + "sage-2.1.0rc.offxml"
-    ligand_mol2 = base + "spirocycles/mol2/lig_36.mol2"
+    ligand_mol2 = base + f"spirocycles/mol2/{lig}.mol2"
 
-    complex_gro_out = base + "spirocycles/lig_36/complex.gro"
-    complex_top_out = base + "spirocycles/lig_36/complex.top"
+    complex_gro_out = base + f"spirocycles/{lig}/complex.gro"
+    complex_top_out = base + f"spirocycles/{lig}/complex.top"
 
-    ligand_gro_out = base + "spirocycles/lig_36/ligand.gro"
-    ligand_top_out = base + "spirocycles/lig_36/ligand.top"
+    ligand_gro_out = base + f"spirocycles/{lig}/ligand.gro"
+    ligand_top_out = base + f"spirocycles/{lig}/ligand.top"
 
     main()
 

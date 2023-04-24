@@ -1,5 +1,6 @@
 import os
 import tempfile
+import copy
 
 import parmed
 import mdtraj
@@ -162,8 +163,8 @@ def fix_gen_pairs(structure):
         tmp_modtop_f.write(line)
     tmp_modtop_f.close()
             
-    new_structure = parmed.load_file(tmp_top.name, xyz=tmp_gro.name)
-    new_structure.save(tmp_modtop.name, overwrite=True)
+    new_structure = parmed.load_file(tmp_modtop_f.name, xyz=tmp_gro.name)
+    new_structure.save("/Users/megosato/Desktop/hello.top", overwrite=True)
 
     # delete all temporary files
     os.unlink(tmp_gro.name)
@@ -179,6 +180,10 @@ def unique_atom_types(pmd_structure, ligcode):
                                                 constraints=None,
                                                 removeCMMotion=False,
                                                 rigidWater=False)
+
+    new_structure = pmd_structure
+    # topology = new_structure.topology
+    # positions = new_structure.positions
     topology = pmd_structure.topology
     positions = pmd_structure.positions
     def check_water(res):
@@ -200,7 +205,10 @@ def unique_atom_types(pmd_structure, ligcode):
     count_id = 0
     for c in topology.chains():
         for r in c.residues():
+            #print(r.name)
             for a in r.atoms():
+                #print(count_id)
+
                 if r.name + a.name in atom_types_dic:
                     a.id = atom_types_dic[r.name + a.name]
                 else:
@@ -210,21 +218,21 @@ def unique_atom_types(pmd_structure, ligcode):
                         else:
                             a.id = 'OW'
                             atom_types_dic[r.name + a.name] = a.id
-                    elif r.name == ligcode:
+                    elif r.name == "UNK" or r.name == "LIG": # previously ligcode
+                        #print("r.name =", r.name)
                         a.id = 'L' + str(count_id)
-                        # else:
-                        #     a.id = 'O' + str(count_id)
-                        #     atom_types_dic[r.name + a.name] = a.id
+                    else:
+                        a.id = 'O' + str(count_id)
+                        atom_types_dic[r.name + a.name] = a.id
 
                     count_id += 1
-
+    
     new_system_structure = parmed.openmm.load_topology(topology,
                                                         system=omm_system,
                                                         xyz=positions)
     new_system_structure.positions = pmd_structure.positions
     new_system_structure.velocities = pmd_structure.velocities
     new_system_structure.box = pmd_structure.box
-        
     return new_system_structure
 
 def find_clashing_water(pmd_struct, lig_resname, distance):
@@ -266,8 +274,28 @@ def find_clashing_water(pmd_struct, lig_resname, distance):
     return clash_res_idx
 
 
+def create_mask_str(resid_to_mask):
+    return f":{':'.join(resid_to_mask)}"
+
+def create_mask_from_exclusion(pmd_struct, exclude_list):
+    res_set = set()
+    for res in pmd_struct.residues:
+        if res.name not in exclude_list:
+            res_set.add(res.name)
+    mask = create_mask_str(res_set)
+    return mask
 
 
+def edit_mol2_positions(mol2_atomtypes, mol2_positions, mol2_out):
+    atomtypes_restemp = parmed.load_file(mol2_atomtypes)
+    positions_restemp = parmed.load_file(mol2_positions)
+    for i,atom in enumerate(atomtypes_restemp.atoms):
+        x,y,z = tuple(positions_restemp.coordinates[i])
+        atom.xx = x
+        atom.xy = y
+        atom.xz = z
+
+    atomtypes_restemp.save(mol2_out)
 
 
 
