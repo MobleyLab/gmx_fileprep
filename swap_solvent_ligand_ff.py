@@ -33,8 +33,6 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out):
     print("Step  1: Loading parameterized Parmed Structure for Ligand + Solvent + Ions")
     pmd_solvent_struct = parmed.load_file(top, xyz=gro)
 
-
-
     print("Step  2: Creating a ligand .mol2 file using Solvent UNL positions")
     utils.printerr("    WARNING: NEED TO FIX the Hs under a different resid than the rest of the ligand")
     utils.printerr("    WARNING: NEED TO FIX atomtypes have an x (i.e. C1x)")
@@ -62,7 +60,7 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out):
 
     print("Step  4: Creating Parmed Structure for Ligand")
     pmd_lig_struct = pmdw.create_pmd_ligand(lig_topology, lig_system, lig_positions)
-    #pmd_lig_struct.save("/Users/megosato/Desktop/lig_after_ff.top")
+    pmd_lig_struct = pmdw.remove_x_atomname(pmd_lig_struct)
 
     print("Step  5: Creating Parmed Structure for Solvent: Ligand + Solvent + Ions")
 
@@ -98,39 +96,70 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out):
 
 if __name__ == "__main__":
 
+    ligand_ff = "openff_unconstrained-2.0.0.offxml"
+    ligcode = "LIG"
+
     desktop_path = Path("/Users/megosato/Desktop")
     si_path = desktop_path / "SI/BACE1/input"
-    output_path = desktop_path / "TESTING"
 
-    ligand_ff = desktop_path / "bace_prep/sage-2.1.0rc.offxml"
+    ligfam = "biphenyl"
+    ligfam_dir = si_path / ligfam
+    mol2_dir = ligfam_dir / "mol2"
 
-    ligcode = "UNL"
+    lig_names = ["lig_04", "lig_02", "lig_03"]
 
-    for ligfam in ["amide_series"]:#, "spirocycles", "biphenyl"]:
-        ligfam_dir = si_path / ligfam
-        mol2_dir = ligfam_dir / "mol2"
-        lig_names = []
-        mol2_files = Path(mol2_dir).glob('*')
-        for f in mol2_files:
-            lig_names.append(str(f.stem))
+    fam_output_dir = desktop_path / "biphenyl_2.0.0_solv_redo"
+    fam_output_dir.mkdir(parents=True, exist_ok=True)
 
-        fam_output_dir = output_path / ligfam
-        fam_output_dir.mkdir(parents=True, exist_ok=True)
+    for lig in lig_names:
+        print(ligfam, lig)
+        lig_si_dir = ligfam_dir / lig
+        gro = str(lig_si_dir / "solvent.gro")
+        top = str(lig_si_dir / "solvent.top")
+        ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
 
-        for lig in lig_names:
+        lig_output_dir = fam_output_dir / lig
+        lig_output_dir.mkdir(parents=True, exist_ok=True)
 
-            print(ligfam, lig)
+        gro_out = str(lig_output_dir / "solvent.gro")
+        top_out = str(lig_output_dir / "solvent.top")
+        pdb_out = str(lig_output_dir / "solvent.pdb")
 
-            lig_si_dir = ligfam_dir / lig
-            gro = str(lig_si_dir / "solvent.gro")
-            top = str(lig_si_dir / "solvent.top")
-            ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
+        main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out)
 
-            lig_output_dir = fam_output_dir / lig
-            lig_output_dir.mkdir(parents=True, exist_ok=True)
+    # desktop_path = Path("/Users/megosato/Desktop")
+    # si_path = desktop_path / "SI/BACE1/input"
+    # output_path = desktop_path / "TESTING"
 
-            gro_out = str(lig_output_dir / "solvent.gro")
-            top_out = str(lig_output_dir / "solvent.top")
+    # ligand_ff = desktop_path / "bace_prep/sage-2.1.0rc.offxml"
 
-            main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out)
+    # ligcode = "UNL"
+
+    # for ligfam in ["amide_series"]:#, "spirocycles", "biphenyl"]:
+    #     ligfam_dir = si_path / ligfam
+    #     mol2_dir = ligfam_dir / "mol2"
+    #     lig_names = []
+    #     mol2_files = Path(mol2_dir).glob('*')
+    #     for f in mol2_files:
+    #         lig_names.append(str(f.stem))
+
+    #     fam_output_dir = output_path / ligfam
+    #     fam_output_dir.mkdir(parents=True, exist_ok=True)
+
+    #     for lig in lig_names:
+
+    #         print(ligfam, lig)
+
+    #         lig_si_dir = ligfam_dir / lig
+    #         gro = str(lig_si_dir / "solvent.gro")
+    #         top = str(lig_si_dir / "solvent.top")
+    #         ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
+
+    #         lig_output_dir = fam_output_dir / lig
+    #         lig_output_dir.mkdir(parents=True, exist_ok=True)
+
+    #         gro_out = str(lig_output_dir / "solvent.gro")
+    #         top_out = str(lig_output_dir / "solvent.top")
+
+    #         main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out)
 

@@ -102,6 +102,17 @@ def rename_atoms(pmd_structure, rename_dict):
                     a.name = rename_dict[(resid,atomfrom)]
     return new_structure
 
+def remove_x_atomname(pmd_structure):
+    new_structure = pmd_structure
+
+    first_residue = None
+    for r in new_structure.residues:
+        if not first_residue:
+            first_residue = r
+        for a in r.atoms:
+            a.name = a.name.strip('x')
+            a.residue = first_residue
+    return new_structure
 
 def complexsolv_to_ligsolv_top(pmd_structure, ligresid, solresid, ion1resid, ion2resid):
     ''' create a structure of the parameterized ligand and solvent 

@@ -58,16 +58,32 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out):
     lig_topology = lig_mol.to_topology()
     lig_system = openff_ff.create_openmm_system(lig_topology)
 
+    for a in lig_mol.atoms:
+        print(a.name)
+
     print("Step  4: Creating Parmed Structure for Ligand")
     pmd_lig_struct = pmdw.create_pmd_ligand(lig_topology, lig_system, lig_positions)
+
+    # do some sketchy stuff to fix atom names with x and Hs in a different residue
+    pmd_lig_struct = pmdw.remove_x_atomname(pmd_lig_struct)
+    pmd_lig_struct.save(f"/Users/megosato/Desktop/{Path(ligand_mol2).name[:-5]}.gro", overwrite=True)
+    pmd_lig_struct.save(f"/Users/megosato/Desktop/{Path(ligand_mol2).name[:-5]}.top", overwrite=True)
+
+    topology = pmd_lig_struct.topology
+    for c in topology.chains():
+        for r in c.residues():
+            #print(r.name)
+            for a in r.atoms():
+                print(a.name, a.residue)
+                
 
     print("Step  5: Creating Parmed Structure for Solvated Complex: Protein + Ligand + Solvent + Ions")
     exclude_resids = [ligcode, 'Na+', 'Cl-', 'HOH']
     unq_lig_struct = pmdw.unique_atom_types(pmd_lig_struct, lig_mol.name)
     unq_lig_struct = pmdw.fix_gen_pairs(unq_lig_struct)
-    unq_lig_struct.save("/Users/megosato/Desktop/test.top", overwrite=True)
+    #unq_lig_struct.save("/Users/megosato/Desktop/test.top", overwrite=True)
 
-    pmd_receptor_struct.save("/Users/megosato/Desktop/test2.top", overwrite=True)
+    #pmd_receptor_struct.save("/Users/megosato/Desktop/test2.top", overwrite=True)
 
     mask = pmdw.create_mask_from_exclusion(pmd_receptor_struct, exclude_resids)
     pmd_complex_struct = pmd_receptor_struct[mask] \
@@ -109,39 +125,71 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out):
 
 
 if __name__ == "__main__":
-    desktop_path = Path("/Users/megosato/Desktop")
-    si_path = desktop_path / "SI/BACE1/input"
-    output_path = desktop_path / "TESTING"
 
-    ligand_ff = desktop_path / "bace_prep/sage-2.1.0rc.offxml"
-
+    ligand_ff = "openff_unconstrained-2.0.0.offxml"
     ligcode = "LIG"
 
-    for ligfam in ["amide_series"]: #, "spirocycles", "biphenyl"]:
-        ligfam_dir = si_path / ligfam
-        mol2_dir = ligfam_dir / "mol2"
-        lig_names = []
-        mol2_files = Path(mol2_dir).glob('*')
-        for f in mol2_files:
-            lig_names.append(str(f.stem))
+    desktop_path = Path("/Users/megosato/Desktop")
+    si_path = desktop_path / "SI/BACE1/input"
 
-        fam_output_dir = output_path / ligfam
-        fam_output_dir.mkdir(parents=True, exist_ok=True)
+    ligfam = "amide_series"
+    ligfam_dir = si_path / ligfam
+    mol2_dir = ligfam_dir / "mol2"
 
-        for lig in lig_names:
+    lig_names = ["lig_41", "lig_67"]
 
-            print(ligfam, lig)
+    fam_output_dir = desktop_path / "41_67_2.0.0_redo"
+    fam_output_dir.mkdir(parents=True, exist_ok=True)
 
-            lig_si_dir = ligfam_dir / lig
-            gro = str(lig_si_dir / "complex.gro")
-            top = str(lig_si_dir / "complex.top")
-            ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
+    for lig in lig_names:
+        print(ligfam, lig)
+        lig_si_dir = ligfam_dir / lig
+        gro = str(lig_si_dir / "complex.gro")
+        top = str(lig_si_dir / "complex.top")
+        ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
 
-            lig_output_dir = fam_output_dir / lig
-            lig_output_dir.mkdir(parents=True, exist_ok=True)
+        lig_output_dir = fam_output_dir / lig
+        lig_output_dir.mkdir(parents=True, exist_ok=True)
 
-            gro_out = str(lig_output_dir / "complex.gro")
-            top_out = str(lig_output_dir / "complex.top")
-            pdb_out = str(lig_output_dir / "complex.pdb")
+        gro_out = str(lig_output_dir / "complex.gro")
+        top_out = str(lig_output_dir / "complex.top")
+        pdb_out = str(lig_output_dir / "complex.pdb")
 
-            main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out)
+        main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out)
+
+    # desktop_path = Path("/Users/megosato/Desktop")
+    # si_path = desktop_path / "SI/BACE1/input"
+    # output_path = desktop_path / "TESTING"
+
+    # ligand_ff = desktop_path / "bace_prep/sage-2.1.0rc.offxml"
+
+    # ligcode = "LIG"
+
+    # for ligfam in ["amide_series"]: #, "spirocycles", "biphenyl"]:
+    #     ligfam_dir = si_path / ligfam
+    #     mol2_dir = ligfam_dir / "mol2"
+    #     lig_names = []
+    #     mol2_files = Path(mol2_dir).glob('*')
+    #     for f in mol2_files:
+    #         lig_names.append(str(f.stem))
+
+    #     fam_output_dir = output_path / ligfam
+    #     fam_output_dir.mkdir(parents=True, exist_ok=True)
+
+    #     for lig in lig_names:
+
+    #         print(ligfam, lig)
+
+    #         lig_si_dir = ligfam_dir / lig
+    #         gro = str(lig_si_dir / "complex.gro")
+    #         top = str(lig_si_dir / "complex.top")
+    #         ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
+
+    #         lig_output_dir = fam_output_dir / lig
+    #         lig_output_dir.mkdir(parents=True, exist_ok=True)
+
+    #         gro_out = str(lig_output_dir / "complex.gro")
+    #         top_out = str(lig_output_dir / "complex.top")
+    #         pdb_out = str(lig_output_dir / "complex.pdb")
+
+    #         main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out)
