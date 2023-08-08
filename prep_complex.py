@@ -6,6 +6,7 @@
 #    the water and ion FF parameters have already been added
 #  * the default parameters in the gromacs .top file are set 
 #    for SepTop (gen-pairs: no, fudgeLJ: 0.5)
+#  * Thank you to Swapnil Wagle for some of this script
 
 import parmed_wrapper as pmdw
 import io_wrapper as iow
