@@ -4,6 +4,8 @@ import copy
 
 import parmed
 import mdtraj
+from rdkit import Chem
+from rdkit.Chem import AllChem
 from openmm import app
 from openmm.unit import *
 
@@ -297,16 +299,42 @@ def create_mask_from_exclusion(pmd_struct, exclude_list):
     return mask
 
 
-def edit_mol2_positions(mol2_atomtypes, mol2_positions, mol2_out):
-    atomtypes_restemp = parmed.load_file(mol2_atomtypes)
+def edit_mol2_positions(atomtypes_struct, mol2_positions):
+    #atomtypes_restemp = parmed.load_file(mol2_atomtypes)[0]
+
     positions_restemp = parmed.load_file(mol2_positions)
-    for i,atom in enumerate(atomtypes_restemp.atoms):
+    for i,atom in enumerate(atomtypes_struct.atoms):
         x,y,z = tuple(positions_restemp.coordinates[i])
         atom.xx = x
         atom.xy = y
         atom.xz = z
 
-    atomtypes_restemp.save(mol2_out)
+    return atomtypes_struct
+
+def combine_lig_residues(lig_struct):
+    pmd_lig_struct = pmdw.create_pmd_ligand(lig_topology, lig_system, lig_positions)
+
+    pmd_lig_struct_res1 = pmd_lig_struct[':1']
+    pmd_lig_struct_res2 = pmd_lig_struct[':2']
+
+    for a in pmd_lig_struct_res2:
+        pmd_lig_struct_res1.add_atom_to_residue(a, pmd_lig_struct_res1.residues[0])
+    return pmd_lig_struct_res1
+
+def reorder_mol_atoms(system_lig_struct, lig_mol2):
+    with tempfile.NamedTemporaryFile(suffix=".pdb") as lig_pdb:
+        system_lig_struct.save(lig_pdb.name, overwrite=True)
+
+        mol2 = Chem.MolFromMol2File(lig_mol2, removeHs=False)
+        mol2_smiles = Chem.MolToSmiles(mol2)
+        template = Chem.MolFromSmiles(mol2_smiles)
+        docked_pose = AllChem.MolFromPDBFile(lig_pdb.name)
+
+        #Assign the bond order to force correct valence
+        rdmol = AllChem.AssignBondOrdersFromTemplate(template, docked_pose)
+
+    return rdmol
+
 
 
 

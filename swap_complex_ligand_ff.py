@@ -23,8 +23,22 @@ import parmed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from openff.toolkit.typing.engines.smirnoff import ForceField
+from openff.toolkit import Molecule
 
 def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out):
+    '''
+        ligand_ff:   ligand forcefield file path or filename
+            * use ligand ff file path if the ff has not been released
+            * use filename if ff is available through openff package
+        gro:         .gro file of complex with old ff
+        top:         .top file of complex with old ff
+        ligcode:     3 letter code for ligand
+        ligand_mol2: .mol2 file for ligand
+        gro_out:     .gro file to write newly parameterized complex 
+        top_out:     .top file to write newly parameterized complex
+        pdb_out:     .pdb file to write newly parameterized complex
+    '''
+
     start_time = time.time()
 
     ##################
@@ -36,54 +50,31 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out):
     pmd_receptor_struct = parmed.load_file(top, xyz=gro)
 
     print("Step  2: Creating a ligand .mol2 file using Complex LIG positions")
-    utils.printerr("    WARNING: NEED TO FIX the Hs under a different resid than the rest of the ligand")
-    utils.printerr("    WARNING: NEED TO FIX atomtypes have an x (i.e. C1x)")
+    utils.printerr("    WARNING: Check the valence and bond order of your ligands")
     complex_lig_struct = pmd_receptor_struct[pmdw.create_mask_str([ligcode])]
-    rdmol = None
-    with tempfile.NamedTemporaryFile(suffix=".pdb") as complex_lig_pdb:
-        complex_lig_struct.save(complex_lig_pdb.name, overwrite=True)
-
-        mol2 = Chem.MolFromMol2File(ligand_mol2)
-        mol2_smiles = Chem.MolToSmiles(mol2)
-        template = Chem.MolFromSmiles(mol2_smiles)
-        docked_pose = AllChem.MolFromPDBFile(complex_lig_pdb.name)
-
-        #Assign the bond order to force correct valence
-        rdmol = AllChem.AssignBondOrdersFromTemplate(template, docked_pose)
+    rdmol = pmdw.reorder_mol_atoms(complex_lig_struct, ligand_mol2)
+    utils.printerr("    WARNING: rdkit mol H coords may be slightly shifted from template")
 
     print("Step  3: Parameterizing Ligand with OpenFF")
     openff_ff = ForceField(ligand_ff)
-    lig_mol = offw.create_molecule(rdmol)
+    lig_mol = Molecule.from_rdkit(rdmol)
     lig_positions = lig_mol.conformers[0]
     lig_topology = lig_mol.to_topology()
     lig_system = openff_ff.create_openmm_system(lig_topology)
 
-    for a in lig_mol.atoms:
-        print(a.name)
-
     print("Step  4: Creating Parmed Structure for Ligand")
     pmd_lig_struct = pmdw.create_pmd_ligand(lig_topology, lig_system, lig_positions)
-
     # do some sketchy stuff to fix atom names with x and Hs in a different residue
     pmd_lig_struct = pmdw.remove_x_atomname(pmd_lig_struct)
-    pmd_lig_struct.save(f"/Users/megosato/Desktop/{Path(ligand_mol2).name[:-5]}.gro", overwrite=True)
-    pmd_lig_struct.save(f"/Users/megosato/Desktop/{Path(ligand_mol2).name[:-5]}.top", overwrite=True)
 
-    topology = pmd_lig_struct.topology
-    for c in topology.chains():
-        for r in c.residues():
-            #print(r.name)
-            for a in r.atoms():
-                print(a.name, a.residue)
-                
+    with tempfile.NamedTemporaryFile(suffix='.mol2') as complex_mol2:
+        complex_lig_struct.save(complex_mol2.name, overwrite=True)
+        pmd_lig_struct = pmdw.edit_mol2_positions(pmd_lig_struct, complex_mol2.name) 
 
     print("Step  5: Creating Parmed Structure for Solvated Complex: Protein + Ligand + Solvent + Ions")
     exclude_resids = [ligcode, 'Na+', 'Cl-', 'HOH']
     unq_lig_struct = pmdw.unique_atom_types(pmd_lig_struct, lig_mol.name)
     unq_lig_struct = pmdw.fix_gen_pairs(unq_lig_struct)
-    #unq_lig_struct.save("/Users/megosato/Desktop/test.top", overwrite=True)
-
-    #pmd_receptor_struct.save("/Users/megosato/Desktop/test2.top", overwrite=True)
 
     mask = pmdw.create_mask_from_exclusion(pmd_receptor_struct, exclude_resids)
     pmd_complex_struct = pmd_receptor_struct[mask] \
@@ -125,71 +116,25 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out):
 
 
 if __name__ == "__main__":
+    ligand_ff = "openff_unconstrained-2.1.0.offxml"
 
-    ligand_ff = "openff_unconstrained-2.0.0.offxml"
+    base_path = Path("/Users/megosato/Desktop/")
+    gro = base_path / "SI/BACE1/input/biphenyl/lig_04/complex.gro"
+    top = base_path / "/Users/megosato/Desktop/SI/BACE1/input/biphenyl/lig_04/complex.top"
     ligcode = "LIG"
+    ligand_mol2 = base_path / "SI/BACE1/input/biphenyl/mol2/lig_04.mol2"
+    gro_out = base_path / "complex.gro"
+    top_out = base_path / "complex.top"
+    pdb_out = base_path / "complex.pdb"
 
-    desktop_path = Path("/Users/megosato/Desktop")
-    si_path = desktop_path / "SI/BACE1/input"
+    main(
+        ligand_ff, 
+        str(gro), str(top), ligcode, str(ligand_mol2), 
+        str(gro_out), str(top_out), str(pdb_out),
+    )
 
-    ligfam = "amide_series"
-    ligfam_dir = si_path / ligfam
-    mol2_dir = ligfam_dir / "mol2"
 
-    lig_names = ["lig_41", "lig_67"]
 
-    fam_output_dir = desktop_path / "41_67_2.0.0_redo"
-    fam_output_dir.mkdir(parents=True, exist_ok=True)
 
-    for lig in lig_names:
-        print(ligfam, lig)
-        lig_si_dir = ligfam_dir / lig
-        gro = str(lig_si_dir / "complex.gro")
-        top = str(lig_si_dir / "complex.top")
-        ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
 
-        lig_output_dir = fam_output_dir / lig
-        lig_output_dir.mkdir(parents=True, exist_ok=True)
 
-        gro_out = str(lig_output_dir / "complex.gro")
-        top_out = str(lig_output_dir / "complex.top")
-        pdb_out = str(lig_output_dir / "complex.pdb")
-
-        main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out)
-
-    # desktop_path = Path("/Users/megosato/Desktop")
-    # si_path = desktop_path / "SI/BACE1/input"
-    # output_path = desktop_path / "TESTING"
-
-    # ligand_ff = desktop_path / "bace_prep/sage-2.1.0rc.offxml"
-
-    # ligcode = "LIG"
-
-    # for ligfam in ["amide_series"]: #, "spirocycles", "biphenyl"]:
-    #     ligfam_dir = si_path / ligfam
-    #     mol2_dir = ligfam_dir / "mol2"
-    #     lig_names = []
-    #     mol2_files = Path(mol2_dir).glob('*')
-    #     for f in mol2_files:
-    #         lig_names.append(str(f.stem))
-
-    #     fam_output_dir = output_path / ligfam
-    #     fam_output_dir.mkdir(parents=True, exist_ok=True)
-
-    #     for lig in lig_names:
-
-    #         print(ligfam, lig)
-
-    #         lig_si_dir = ligfam_dir / lig
-    #         gro = str(lig_si_dir / "complex.gro")
-    #         top = str(lig_si_dir / "complex.top")
-    #         ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
-
-    #         lig_output_dir = fam_output_dir / lig
-    #         lig_output_dir.mkdir(parents=True, exist_ok=True)
-
-    #         gro_out = str(lig_output_dir / "complex.gro")
-    #         top_out = str(lig_output_dir / "complex.top")
-    #         pdb_out = str(lig_output_dir / "complex.pdb")
-
-    #         main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out)

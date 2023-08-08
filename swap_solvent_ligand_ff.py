@@ -21,68 +21,69 @@ import parmed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from openff.toolkit.typing.engines.smirnoff import ForceField
+from openff.toolkit import Molecule
+
 
 def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out):
+    '''
+        ligand_ff:   ligand forcefield file path or filename
+            * use ligand ff file path if the ff has not been released
+            * use filename if ff is available through openff package
+        gro:         .gro file of solvent with old ff
+        top:         .top file of solvent with old ff
+        ligcode:     3 letter code for ligand
+        ligand_mol2: .mol2 file for ligand
+        gro_out:     .gro file to write newly parameterized solvent 
+        top_out:     .top file to write newly parameterized solvent
+    '''
+
+
     start_time = time.time()
 
-    ###################
-    ## SOLVENT SETUP ##
-    ###################
     print("\n\nSolvent Setup\n" + "="*13)
 
     print("Step  1: Loading parameterized Parmed Structure for Ligand + Solvent + Ions")
     pmd_solvent_struct = parmed.load_file(top, xyz=gro)
 
-    print("Step  2: Creating a ligand .mol2 file using Solvent UNL positions")
-    utils.printerr("    WARNING: NEED TO FIX the Hs under a different resid than the rest of the ligand")
-    utils.printerr("    WARNING: NEED TO FIX atomtypes have an x (i.e. C1x)")
-
-    rdmol = None
+    print("Step  2: Creating an rdkit mol of ligand using Solvent UNL positions and Mol2 atomtypes")
     solvent_lig_struct = pmd_solvent_struct[pmdw.create_mask_str([ligcode])]
-    with tempfile.NamedTemporaryFile(suffix=".pdb") as solvent_pdb:
-        solvent_lig_struct.save(solvent_pdb.name, overwrite=True)
-        #pmdw.edit_mol2_positions(ligand_mol2, solvent_mol2.name, ligand_mol2_solvent)
-
-        mol2 = Chem.MolFromMol2File(ligand_mol2)
-        mol2_smiles = Chem.MolToSmiles(mol2)
-        template = Chem.MolFromSmiles(mol2_smiles)
-        docked_pose = AllChem.MolFromPDBFile(solvent_pdb.name)
-
-        #Assign the bond order to force correct valence
-        rdmol = AllChem.AssignBondOrdersFromTemplate(template, docked_pose)
+    rdmol = pmdw.reorder_mol_atoms(solvent_lig_struct, ligand_mol2)
+    utils.printerr("    WARNING: rdkit mol H coords may be slightly shifted from template")
 
     print("Step  3: Parameterizing Ligand with OpenFF")
     openff_ff = ForceField(ligand_ff)
-    lig_mol = offw.create_molecule(rdmol, ligcode)
+    lig_mol = Molecule.from_rdkit(rdmol)
     lig_positions = lig_mol.conformers[0]
     lig_topology = lig_mol.to_topology()
     lig_system = openff_ff.create_openmm_system(lig_topology)
 
+    
     print("Step  4: Creating Parmed Structure for Ligand")
     pmd_lig_struct = pmdw.create_pmd_ligand(lig_topology, lig_system, lig_positions)
     pmd_lig_struct = pmdw.remove_x_atomname(pmd_lig_struct)
 
-    print("Step  5: Creating Parmed Structure for Solvent: Ligand + Solvent + Ions")
+    with tempfile.NamedTemporaryFile(suffix='.mol2') as solvent_mol2:
+        solvent_lig_struct.save(solvent_mol2.name, overwrite=True)
+        pmd_lig_struct = pmdw.edit_mol2_positions(pmd_lig_struct, solvent_mol2.name)
 
+
+    print("Step  5: Creating Parmed Structure for Solvent: Ligand + Solvent + Ions")
     pmd_solvent_struct = pmd_solvent_struct[':Cl-:Na+'] \
                         + pmd_lig_struct \
                         + pmd_solvent_struct[':HOH']
 
     unq_solvent_struct = pmdw.unique_atom_types(pmd_solvent_struct, lig_mol.name)
-    #unq_solvent_struct.save("/Users/megosato/Desktop/solvent_after_combo.top")
 
     print("Step  6: Ensuring Ligand Atomtypes are Unique")
-    #unq_solvent_struct = pmdw.unique_atom_types(pmd_solvent_struct, lig_mol.name)
     final_solvent_struct = pmdw.fix_gen_pairs(unq_solvent_struct)
 
     print("Step  7: Saving out Solvent .gro and .top")
     final_solvent_struct.save(gro_out, overwrite=True)
     final_solvent_struct.save(top_out, overwrite=True)
 
-
     # Add a sanity check that confirms gro files are the same before and after addition
     # of differently parameterized ligand
-    print("Step  9: Sanity check:")
+    print("Step  9: Sanity check (VERY BASIC, PLEASE CHECK YOUR FILES):")
     print("  .gro: modified file columns should be a subset of the original (subset or !subset)")
     print("  .top: modified file should be different from original")
     print(f"    filetype  original  modified  difference")
@@ -90,76 +91,20 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out):
     print(f"      .gro    {iow.count_lines(gro):>8}  {iow.count_lines(gro_out):>8}  {'subset' if iow.is_a_subset(gro_out, gro) else '!subset':>10}")
     print(f"      .top    {iow.count_lines(top):>8}  {iow.count_lines(top_out):>8}  {iow.diff(top, top_out):>10}")
 
-
-    # end_time = time.time()
-    # print(f"Total Time Elapsed: {(end_time - start_time)/60:.2} min")
+    end_time = time.time()
+    print(f"Total Time Elapsed: {(end_time - start_time)/60:.2} min")
 
 if __name__ == "__main__":
+    ligand_ff = "openff_unconstrained-2.1.0.offxml"
 
-    ligand_ff = "openff_unconstrained-2.0.0.offxml"
-    ligcode = "LIG"
+    base_path = Path("/Users/megosato/Desktop/")
+    gro = base_path / "SI/BACE1/input/biphenyl/lig_04/solvent.gro"
+    top = base_path / "/Users/megosato/Desktop/SI/BACE1/input/biphenyl/lig_04/solvent.top"
+    ligcode = "UNL"
+    ligand_mol2 = base_path / "SI/BACE1/input/biphenyl/mol2/lig_04.mol2"
+    gro_out = base_path / "solvent.gro"
+    top_out = base_path / "solvent.top"
 
-    desktop_path = Path("/Users/megosato/Desktop")
-    si_path = desktop_path / "SI/BACE1/input"
-
-    ligfam = "biphenyl"
-    ligfam_dir = si_path / ligfam
-    mol2_dir = ligfam_dir / "mol2"
-
-    lig_names = ["lig_04", "lig_02", "lig_03"]
-
-    fam_output_dir = desktop_path / "biphenyl_2.0.0_solv_redo"
-    fam_output_dir.mkdir(parents=True, exist_ok=True)
-
-    for lig in lig_names:
-        print(ligfam, lig)
-        lig_si_dir = ligfam_dir / lig
-        gro = str(lig_si_dir / "solvent.gro")
-        top = str(lig_si_dir / "solvent.top")
-        ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
-
-        lig_output_dir = fam_output_dir / lig
-        lig_output_dir.mkdir(parents=True, exist_ok=True)
-
-        gro_out = str(lig_output_dir / "solvent.gro")
-        top_out = str(lig_output_dir / "solvent.top")
-        pdb_out = str(lig_output_dir / "solvent.pdb")
-
-        main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out)
-
-    # desktop_path = Path("/Users/megosato/Desktop")
-    # si_path = desktop_path / "SI/BACE1/input"
-    # output_path = desktop_path / "TESTING"
-
-    # ligand_ff = desktop_path / "bace_prep/sage-2.1.0rc.offxml"
-
-    # ligcode = "UNL"
-
-    # for ligfam in ["amide_series"]:#, "spirocycles", "biphenyl"]:
-    #     ligfam_dir = si_path / ligfam
-    #     mol2_dir = ligfam_dir / "mol2"
-    #     lig_names = []
-    #     mol2_files = Path(mol2_dir).glob('*')
-    #     for f in mol2_files:
-    #         lig_names.append(str(f.stem))
-
-    #     fam_output_dir = output_path / ligfam
-    #     fam_output_dir.mkdir(parents=True, exist_ok=True)
-
-    #     for lig in lig_names:
-
-    #         print(ligfam, lig)
-
-    #         lig_si_dir = ligfam_dir / lig
-    #         gro = str(lig_si_dir / "solvent.gro")
-    #         top = str(lig_si_dir / "solvent.top")
-    #         ligand_mol2 = str(mol2_dir / f"{lig}.mol2")
-
-    #         lig_output_dir = fam_output_dir / lig
-    #         lig_output_dir.mkdir(parents=True, exist_ok=True)
-
-    #         gro_out = str(lig_output_dir / "solvent.gro")
-    #         top_out = str(lig_output_dir / "solvent.top")
-
-    #         main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out)
+    
+    main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out)
 
