@@ -7,11 +7,3 @@ def create_molecule(mol, ligcode="LIG"):
     for atom in ligand_molecule.atoms:
         atom.metadata["residue_name"] = ligcode
     return ligand_molecule
-
-
-def create_molecule(mol, ligcode="LIG"):
-    ligand_molecule = Molecule(mol)
-    ligand_molecule.name = ligcode
-    for atom in ligand_molecule.atoms:
-        atom.metadata["residue_name"] = ligcode
-    return ligand_molecule
