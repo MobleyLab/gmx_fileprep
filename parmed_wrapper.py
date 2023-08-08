@@ -311,16 +311,6 @@ def edit_mol2_positions(atomtypes_struct, mol2_positions):
 
     return atomtypes_struct
 
-def combine_lig_residues(lig_struct):
-    pmd_lig_struct = pmdw.create_pmd_ligand(lig_topology, lig_system, lig_positions)
-
-    pmd_lig_struct_res1 = pmd_lig_struct[':1']
-    pmd_lig_struct_res2 = pmd_lig_struct[':2']
-
-    for a in pmd_lig_struct_res2:
-        pmd_lig_struct_res1.add_atom_to_residue(a, pmd_lig_struct_res1.residues[0])
-    return pmd_lig_struct_res1
-
 def reorder_mol_atoms(system_lig_struct, lig_mol2):
     with tempfile.NamedTemporaryFile(suffix=".pdb") as lig_pdb:
         system_lig_struct.save(lig_pdb.name, overwrite=True)
