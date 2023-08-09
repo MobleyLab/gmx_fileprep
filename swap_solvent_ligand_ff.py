@@ -52,12 +52,11 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out):
 
     print("Step  3: Parameterizing Ligand with OpenFF")
     openff_ff = ForceField(ligand_ff)
-    lig_mol = Molecule.from_rdkit(rdmol)
+    lig_mol = offw.create_molecule(rdmol, ligcode)
     lig_positions = lig_mol.conformers[0]
     lig_topology = lig_mol.to_topology()
     lig_system = openff_ff.create_openmm_system(lig_topology)
-
-    
+       
     print("Step  4: Creating Parmed Structure for Ligand")
     pmd_lig_struct = pmdw.create_pmd_ligand(lig_topology, lig_system, lig_positions)
     pmd_lig_struct = pmdw.remove_x_atomname(pmd_lig_struct)
@@ -106,5 +105,11 @@ if __name__ == "__main__":
     top_out = base_path / "solvent.top"
 
     
-    main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out)
+    main(
+        ligand_ff, 
+        str(gro), str(top), 
+        ligcode, 
+        str(ligand_mol2), 
+        str(gro_out), str(top_out),
+    )
 

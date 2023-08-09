@@ -57,7 +57,7 @@ def main(ligand_ff, gro, top, ligcode, ligand_mol2, gro_out, top_out, pdb_out):
 
     print("Step  3: Parameterizing Ligand with OpenFF")
     openff_ff = ForceField(ligand_ff)
-    lig_mol = Molecule.from_rdkit(rdmol)
+    lig_mol = offw.create_molecule(rdmol, ligcode)
     lig_positions = lig_mol.conformers[0]
     lig_topology = lig_mol.to_topology()
     lig_system = openff_ff.create_openmm_system(lig_topology)
